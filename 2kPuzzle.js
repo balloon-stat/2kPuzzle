@@ -35,6 +35,30 @@ class Game {
       "resize",
       () => this.calculateLayout()
     );
+
+    document.getElementById("newButton").addEventListener( "click", ()=>{
+      const ok = confirm( "現在のゲームを破棄して新しいゲームを開始しますか？");
+      if(ok){
+        this.startNewGame();
+        this.saveGame();
+      }
+    });
+    document.getElementById("undoButton").addEventListener( "click", ()=>
+      this.undo()
+    );
+  }
+
+  undo(){
+    if(!this.undoState){
+      return;
+    }
+    this.board = [...this.undoState.board];
+    this.score = this.undoState.score;
+    this.cleared = this.undoState.cleared;
+    this.gameOver = this.undoState.gameOver;
+    this.updateScore();
+    this.syncTilesToBoard();
+    this.saveGame();
   }
 
   setupInput(){
@@ -110,12 +134,13 @@ class Game {
     tile.textContent = value;
     this.tileLayer.appendChild(tile);
 
-    this.tiles.set( id, { id, value, index, element:tile });
+    const data = { id, value, index, element:tile };
+    this.tiles.set( id, data );
 
     this.updateTileAppearance(id);
     this.moveTileDOM(id,index,false);
 
-    return id;
+    return data;
   }
 
   moveTileDOM(id,index,animate=true){
@@ -183,10 +208,7 @@ class Game {
         scoreGain += last.value;
         merged = true;
       } else {
-        result.push({
-          value: current,
-          merged: false
-        });
+        result.push({ value: current, merged: false });
       }
     }
 
@@ -248,7 +270,7 @@ class Game {
     this.updateScore();
     this.spawnRandomTile();
     this.spawnRandomTile();
-    this.renderBoard();
+    this.syncTilesToBoard();
   }
 
   getEmptyCells(){
@@ -273,8 +295,6 @@ class Game {
     const value = Math.random() < 0.9 ? 2 : 4;
 
     this.board[index] = value;
-    this.createTile(value,index);
-
     return true;
   }
 
@@ -282,21 +302,6 @@ class Game {
     this.scoreElement.textContent = this.score;
     this.bestScore = Math.max( this.bestScore, this.score);
     this.bestElement.textContent = this.bestScore;
-  }
-
-  renderBoard(){
-    this.tileLayer.innerHTML = "";
-    this.tiles.clear();
-
-    for(let i=0;i<16;i++){
-      const value = this.board[i];
-
-      if(value === 0){
-        continue;
-      }
-
-      this.createTile( value, i);
-    }
   }
 
   moveLeft(){
@@ -390,40 +395,192 @@ class Game {
   }
 
   move(direction){
-    if(this.animating){
-      return;
-    }
+    if(this.animating){ return; }
+    if(this.gameOver){ return; }
+
+    this.saveUndoState();
+    const before = [...this.board];
 
     let result;
     switch(direction){
       case "left":
-        result = this.moveLeft();
+        result=this.moveLeft();
         break;
       case "right":
-        result = this.moveRight();
+        result=this.moveRight();
         break;
       case "up":
-        result = this.moveUp();
+        result=this.moveUp();
         break;
       case "down":
-        result = this.moveDown();
+        result=this.moveDown();
         break;
     }
 
     if(!result.changed){
       return;
     }
+    this.animating = true;
     this.score += result.scoreGain;
     this.updateScore();
-    this.sound.move();
-    this.spawnRandomTile();
-    this.renderBoard();
+
+    if(result.scoreGain>0){
+      this.sound.merge();
+      navigator.vibrate?.(40);
+    }else{
+      this.sound.move();
+    }
+
+    setTimeout(()=>{
+      this.spawnRandomTile();
+      this.syncTilesToBoard();
+      this.checkClear();
+      this.checkGameOver();
+      this.saveGame();
+      this.animating=false;
+    },130);
+  }
+
+  saveUndoState(){
+    this.undoState = {
+      board:[...this.board],
+      score:this.score,
+      cleared:this.cleared,
+      gameOver:this.gameOver
+    };
+  }
+
+  saveGame(){
+    const data = {
+      board:this.board,
+      score:this.score,
+      bestScore:this.bestScore,
+      undoState:this.undoState,
+      cleared:this.cleared,
+      gameOver:this.gameOver
+    };
+    localStorage.setItem( "2kPuzzle", JSON.stringify(data));
+  }
+
+  loadGame(){
+    const raw = localStorage.getItem("2kPuzzle");
+    if(!raw){
+      this.startNewGame();
+      return;
+    }
+    const data = JSON.parse(raw);
+    this.board = data.board;
+    this.score = data.score || 0;
+    this.bestScore = data.bestScore || 0;
+    this.undoState = data.undoState || null;
+    this.cleared = data.cleared || false;
+    this.gameOver = data.gameOver || false;
+    this.updateScore();
+    this.syncTilesToBoard();
+  }
+
+  syncTilesToBoard(){
+    const existing = new Map();
+
+    for(const tile of this.tiles.values()){
+      existing.set( tile.index, tile);
+    }
+
+    for(let index=0;index<16;index++){
+      const value = this.board[index];
+      const tile = existing.get(index);
+
+      if(value===0){
+        if(tile){
+          tile.element.remove();
+          this.tiles.delete(tile.id);
+        }
+
+        continue;
+      }
+      if(tile){
+        if(tile.value!==value){
+          tile.value=value;
+          this.updateTileAppearance(tile.id);
+        }
+        continue;
+      }
+      const newTile = this.createTile(value, index);
+      newTile.element.classList.add( "tile-new");
+    }
+  }
+
+  showMessage(text){
+    this.messageElement.textContent = text;
+    this.messageElement.classList.remove("message-hidden");
+    this.messageElement.classList.add("message-show");
+  }
+
+  hideMessage(){
+    this.messageElement.classList.remove("message-show");
+    this.messageElement.classList.add("message-hidden");
+  }
+
+  checkClear(){
+    if(this.cleared){
+      return;
+    }
+
+    for(const value of this.board){
+      if(value === 2048){
+        this.cleared = true;
+        this.showMessage(
+          "2048!"
+        );
+
+        this.sound.clear();
+        navigator.vibrate?.( [100,50,100]);
+        setTimeout( ()=>this.hideMessage(), 1500);
+        break;
+      }
+    }
+  }
+
+  canMove(){
+    for(let i=0;i<16;i++){
+      if(this.board[i]===0){
+        return true;
+      }
+    }
+    for(let r=0;r<4;r++){
+      for(let c=0;c<4;c++){
+        const idx = r*4+c;
+        const value = this.board[idx];
+        if(c<3){
+          if( value === this.board[idx+1]){
+            return true;
+          }
+        }
+
+        if(r<3){
+          if( value === this.board[idx+4]){
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  checkGameOver(){
+    if(this.canMove()){
+      return;
+    }
+    this.gameOver = true;
+    this.showMessage( "GAME OVER");
+    this.sound.gameOver();
+    navigator.vibrate?.( [200,100,200]);
   }
 }
 
 window.addEventListener("load", () => {
   window.game = new Game();
-  game.startNewGame();
+  game.loadGame();
 });
 
 

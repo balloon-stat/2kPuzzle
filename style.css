@@ -137,13 +137,60 @@ h1{
 
   background:rgba(255,255,255,0.75);
 
-  opacity:1;
+  transition:
+    opacity 300ms,
+    transform 300ms;
+}
 
-  transition:opacity 300ms;
+
+.message-hidden{
+  opacity:0;
+  transform:scale(1.2);
+  pointer-events:none;
+}
+
+.message-show{
+  opacity:1;
+  transform:scale(1);
+}
+
+.tile-pop{
+  animation: tilePop 140ms ease;
+}
+
+@keyframes tilePop{
+  0%{ transform:scale(1); }
+  50%{ transform:scale(1.25); }
+  100%{ transform:scale(1); }
+}
+
+.tile-new{
+  animation: tileNew 160ms ease;
+}
+
+@keyframes tileNew{
+  from{
+    opacity:0;
+    transform:scale(0);
+  }
+
+  to{
+    opacity:1;
+    transform:scale(1);
+  }
+}
+
+.message{
+  transform:scale(1);
+  transition: opacity 300ms, transform 300ms;
+}
+
+.message.show{
+  opacity:1;
+  transform:scale(1);
 }
 
 .hidden{
   opacity:0;
-  pointer-events:none;
+  transform:scale(1.2);
 }
-
