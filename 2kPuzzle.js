@@ -14,8 +14,8 @@ class Game {
     this.board = new Array(Game.CELL_COUNT).fill(null);
     this.tileElements = new Map();
     this.lastMoveInfo = [];
-    this.undostate = null;
-    this.beforestate = null;
+    this.undoState = null;
+    this.beforeState = null;
 
     this.setupInput();
 
@@ -324,22 +324,22 @@ class Game {
     this.tileElements.clear();
     this.tileLayer.innerHTML = "";
     this.lastMoveInfo = [];
-    this.undostate = null;
-    this.beforestate = null;
+    this.undoState = null;
+    this.beforeState = null;
     this.cleared = false;
-    this.gameover = false;
-    this.nexttileid = 1;
+    this.gameOver = false;
+    this.nextTileId = 1;
     this.score = 0;
 
-    this.hidemessage();
+    this.hideMessage();
 
-    this.updatescore();
-    this.spawnrandomtile();
-    this.spawnrandomtile();
-    this.synctilestoboard();
+    this.updateScore();
+    this.spawnRandomTile();
+    this.spawnRandomTile();
+    this.syncTilesToBoard();
   }
 
-  getemptycells(){
+  getEmptyCells(){
     const result = [];
     for(let i=0;i<16;i++){
       if(this.board[i] === null){
@@ -350,34 +350,34 @@ class Game {
     return result;
   }
 
-  spawnrandomtile(){
-    const empty = this.getemptycells();
+  spawnRandomTile(){
+    const empty = this.getEmptyCells();
     if(empty.length === 0){
       return false;
     }
 
-    const index = empty[ math.floor( math.random() * empty.length) ];
+    const index = empty[ Math.floor( Math.random() * empty.length) ];
     this.board[index] = {
-      id: this.nexttileid++,
-      value: math.random() < 0.9 ? 2 : 4
+      id: this.nextTileId++,
+      value: Math.random() < 0.9 ? 2 : 4
     };
     return true;
   }
 
-  updatescore(){
-    this.scoreelement.textcontent = this.score;
-    this.bestscore = math.max( this.bestscore, this.score);
-    this.bestelement.textcontent = this.bestscore;
+  updateScore(){
+    this.scoreElement.textContent = this.score;
+    this.bestScore = Math.max( this.bestScore, this.score);
+    this.bestElement.textContent = this.bestScore;
   }
 
-  moveleft(){
+  moveLeft(){
     let changed = false;
-    let totalscore = 0;
+    let totalScore = 0;
 
     for(let row=0;row<4;row++){
-      const line = this.getrow(row);
+      const line = this.getRow(row);
       const cells = line.map((value,col)=>{
-        const index = this.rowcoltoindex(row,col);
+        const index = this.rowColToIndex(row,col);
         const tile = this.board[index];
         return tile
           ? {
@@ -386,34 +386,34 @@ class Game {
             }
           : null;
       });
-      const result = this.compressline(cells);
+      const result = this.compressLine(cells);
       if(
-        json.stringify(line) !==
-        json.stringify(result.line)
+        JSON.stringify(line) !==
+        JSON.stringify(result.line)
       ){
         changed = true;
       }
 
-      totalscore += result.scoregain;
-      this.setrow( row, result.line);
+      totalScore += result.scoreGain;
+      this.setRow( row, result.line);
       for(const move of result.moves){
-        this.lastmoveinfo.push({
+        this.lastMoveInfo.push({
           ...move,
-          to:this.rowcoltoindex(row, move.to)
+          to:this.rowColToIndex(row, move.to)
         });
       }
     }
-    return { changed, scoregain:totalscore };
+    return { changed, scoreGain:totalScore };
   }
 
-  moveright(){
+  moveRight(){
     let changed = false;
-    let totalscore = 0;
+    let totalScore = 0;
 
     for(let row=0;row<4;row++){
-      const line = this.getrow(row);
+      const line = this.getRow(row);
       const cells = [...line].reverse().map((value, col) => {
-        const index = this.rowcoltoindex(row, 3 - col);
+        const index = this.rowColToIndex(row, 3 - col);
         const tile = this.board[index];
         return tile
           ? {
@@ -422,35 +422,35 @@ class Game {
             }
           : null;
       });
-      const result = this.compressline(cells);
+      const result = this.compressLine(cells);
       const output = [...result.line].reverse();
       if(
-        json.stringify( this.getrow(row)) !==
-        json.stringify(output)
+        JSON.stringify( this.getRow(row)) !==
+        JSON.stringify(output)
       ){
         changed = true;
       }
 
-      totalscore += result.scoregain;
-      this.setrow(row, output);
+      totalScore += result.scoreGain;
+      this.setRow(row, output);
       for(const move of result.moves){
-        this.lastmoveinfo.push({
+        this.lastMoveInfo.push({
           ...move,
-          to:this.rowcoltoindex(row, 3 - move.to)
+          to:this.rowColToIndex(row, 3 - move.to)
         });
       }
     }
-    return { changed, scoregain:totalscore };
+    return { changed, scoreGain:totalScore };
   }
 
-  moveup(){
+  moveUp(){
     let changed = false;
-    let totalscore = 0;
+    let totalScore = 0;
 
     for(let col=0;col<4;col++){
-      const line = this.getcolumn(col);
+      const line = this.getColumn(col);
       const cells = line.map((value,row)=>{
-        const index = this.rowcoltoindex(row,col);
+        const index = this.rowColToIndex(row,col);
         const tile = this.board[index];
         return tile
           ? {
@@ -459,37 +459,37 @@ class Game {
             }
           : null;
       });
-      const result = this.compressline(cells);
+      const result = this.compressLine(cells);
 
       if(
-        json.stringify(line) !==
-        json.stringify(result.line)
+        JSON.stringify(line) !==
+        JSON.stringify(result.line)
       ){
         changed = true;
       }
 
-      totalscore += result.scoregain;
-      this.setcolumn( col, result.line);
+      totalScore += result.scoreGain;
+      this.setColumn( col, result.line);
       
       for (const move of result.moves) {
-        this.lastmoveinfo.push({
+        this.lastMoveInfo.push({
           ...move,
-          to: this.rowcoltoindex(move.to, col)
+          to: this.rowColToIndex(move.to, col)
         });
       }
     }
 
-    return { changed, scoregain:totalscore };
+    return { changed, scoreGain:totalScore };
   }
 
-  movedown(){
+  moveDown(){
     let changed = false;
-    let totalscore = 0;
+    let totalScore = 0;
 
     for(let col=0;col<4;col++){
-      const line = this.getcolumn(col);
+      const line = this.getColumn(col);
       const cells = [...line].reverse().map((value, row) => {
-        const index = this.rowcoltoindex(3 - row, col);
+        const index = this.rowColToIndex(3 - row, col);
         const tile = this.board[index];
         return tile
           ? {
@@ -498,58 +498,58 @@ class Game {
             }
           : null;
       });
-      const result = this.compressline(cells);
+      const result = this.compressLine(cells);
       const output = [...result.line].reverse();
 
       if(
-        json.stringify( this.getcolumn(col)) !==
-        json.stringify(output)
+        JSON.stringify( this.getColumn(col)) !==
+        JSON.stringify(output)
       ){
         changed = true;
       }
 
-      totalscore += result.scoregain;
-      this.setcolumn( col, output);
+      totalScore += result.scoreGain;
+      this.setColumn( col, output);
       
       for (const move of result.moves) {
-        this.lastmoveinfo.push({
+        this.lastMoveInfo.push({
           ...move,
-          to: this.rowcoltoindex( 3 - move.to, col)
+          to: this.rowColToIndex( 3 - move.to, col)
         });
       }
     }
-    return { changed, scoregain:totalscore };
+    return { changed, scoreGain:totalScore };
   }
 
   move(direction){
     if(this.animating){ return; }
-    if(this.gameover){ return; }
+    if(this.gameOver){ return; }
 
-    this.savebeforestate();
-    this.lastmoveinfo = [];
+    this.saveBeforeState();
+    this.lastMoveInfo = [];
 
     let result;
     switch(direction){
       case "left":
-        result=this.moveleft();
+        result=this.moveLeft();
         break;
       case "right":
-        result=this.moveright();
+        result=this.moveRight();
         break;
       case "up":
-        result=this.moveup();
+        result=this.moveUp();
         break;
       case "down":
-        result=this.movedown();
+        result=this.moveDown();
         break;
     }
 
     if(!result.changed){
-      this.beforestate = null;
+      this.beforeState = null;
       return;
     }
-    this.undostate = this.beforestate;
-    this.beforestate = null;
+    this.undoState = this.beforeState;
+    this.beforeState = null;
     this.animating = true;
     this.score += result.scoreGain;
     this.updateScore();
