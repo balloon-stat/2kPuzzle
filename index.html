@@ -1,52 +1,46 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta
-  name="viewport"
-  content="width=device-width,initial-scale=1,user-scalable=no"
-/>
-<title>2kPuzzle</title>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,user-scalable=no"
+  />
+  <title>2kPuzzle</title>
 
-<link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="app">
 
-<div class="app">
+    <h1>2kPuzzle</h1>
 
-  <h1>2kPuzzle</h1>
+    <div class="score-area">
+      <div class="score-box">
+        <span>Score</span>
+        <div id="score">0</div>
+      </div>
 
-  <div class="score-area">
-    <div class="score-box">
-      <span>Score</span>
-      <div id="score">0</div>
+      <div class="score-box">
+        <span>Best</span>
+        <div id="bestScore">0</div>
+      </div>
     </div>
 
-    <div class="score-box">
-      <span>Best</span>
-      <div id="bestScore">0</div>
+    <div class="button-area">
+      <button id="newButton">NEW</button>
+      <button id="undoButton">UNDO</button>
+    </div>
+
+    <div id="board" class="board">
+      <div class="cell-layer"></div>
+      <div id="tileLayer" class="tile-layer"></div>
+      <div id="message" class="message message-hidden"></div>
     </div>
   </div>
 
-  <div class="button-area">
-    <button id="newButton">NEW</button>
-    <button id="undoButton">UNDO</button>
-  </div>
-
-  <div id="board" class="board">
-
-    <div class="cell-layer"></div>
-
-    <div id="tileLayer" class="tile-layer"></div>
-
-    <div id="message" class="message message-hidden"></div>
-
-  </div>
-
-</div>
-
-<script src="sound.js"></script>
-<script src="2kPuzzle.js"></script>
+  <script src="sound.js"></script>
+  <script src="2kPuzzle.js"></script>
 
 </body>
 </html>

@@ -11,11 +11,11 @@ class Game {
     this.bestElement = document.getElementById("bestScore");
     this.sound = new Sound();
 
-    this.board = new Array(Game.CELL_COUNT).fill(0);
-    this.tiles = new Map();
-
-    this.startX = 0;
-    this.startY = 0;
+    this.board = new Array(Game.CELL_COUNT).fill(null);
+    this.tileElements = new Map();
+    this.lastMoveInfo = [];
+    this.undostate = null;
+    this.beforestate = null;
 
     this.setupInput();
 
@@ -31,10 +31,10 @@ class Game {
     this.createBackgroundCells();
     this.calculateLayout();
 
-    window.addEventListener(
-      "resize",
-      () => this.calculateLayout()
-    );
+    window.addEventListener("resize", () => {
+      this.calculateLayout();
+      this.syncTilesToBoard();
+    });
 
     document.getElementById("newButton").addEventListener( "click", ()=>{
       const ok = confirm( "現在のゲームを破棄して新しいゲームを開始しますか？");
@@ -52,45 +52,71 @@ class Game {
     if(!this.undoState){
       return;
     }
-    this.board = [...this.undoState.board];
+    if (this.gameOver) {
+      this.hideMessage();
+    }
+    this.board = structuredClone( this.undoState.board);
+    this.nextTileId = this.undoState.nextTileId;
     this.score = this.undoState.score;
     this.cleared = this.undoState.cleared;
     this.gameOver = this.undoState.gameOver;
     this.updateScore();
-    this.syncTilesToBoard();
+
+    // DOM全再構築
+    this.tileLayer.innerHTML = "";
+    this.tileElements.clear();
+    for(let index=0; index<16; index++){
+      const tileData = this.board[index];
+      if(tileData){
+        this.createTile(tileData, index);
+      }
+    }
+
     this.saveGame();
   }
 
   setupInput(){
     const board = this.boardElement;
-    board.addEventListener( "touchstart", e => {
-        const t = e.touches[0];
+    let startX = 0;
+    let startY = 0;
+    let activePointerId = null;
 
-        this.startX = t.clientX;
-        this.startY = t.clientY;
-      },
-      { passive:false }
-    );
+    board.addEventListener( "pointerdown", e => {
+      board.setPointerCapture(e.pointerId);
+      activePointerId = e.pointerId;
 
-    board.addEventListener( "touchmove",
-      e => e.preventDefault(),
-      { passive:false }
-    );
+      startX = e.clientX;
+      startY = e.clientY;
+    });
 
-    board.addEventListener( "touchend", e => {
-      const t = e.changedTouches[0];
-      const dx = t.clientX - this.startX;
-      const dy = t.clientY - this.startY;
+    board.addEventListener( "pointerup", e => {
+      if(activePointerId !== e.pointerId){
+        return;
+      }
+      activePointerId = null;
+      board.releasePointerCapture(e.pointerId);
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
 
       if( Math.abs(dx) < 30 && Math.abs(dy) < 30){
         return;
       }
 
-      if( Math.abs(dx) > Math.abs(dy)){
+      if(Math.abs(dx) > Math.abs(dy)){
         this.move( dx > 0 ? "right" : "left");
       }else{
         this.move( dy > 0 ? "down" : "up");
       }
+    });
+
+    board.addEventListener("pointercancel", e => {
+      if(board.hasPointerCapture(e.pointerId)){
+        board.releasePointerCapture(e.pointerId);
+      }
+      activePointerId = null;
+      startX = 0;
+      startY = 0;
     });
   }
 
@@ -119,53 +145,46 @@ class Game {
       top: 10 + row * (this.cellSize + this.cellGap)
     };
   }
-
-  createTileModel(value,index){
-    const id = this.createTile(value,index);
-    return { id, value, index };
-  }
-
-  createTile(value,index){
+  
+  createTile(tileData, index){
+    const id = tileData.id;
     const tile = document.createElement("div");
-    const id = this.nextTileId++;
 
     tile.className = "tile";
     tile.dataset.id = id;
-    tile.textContent = value;
     this.tileLayer.appendChild(tile);
-
-    const data = { id, value, index, element:tile };
-    this.tiles.set( id, data );
-
-    this.updateTileAppearance(id);
+    this.tileElements.set( id, tile );
+    this.updateTileAppearance(id, tileData.value);
     this.moveTileDOM(id,index,false);
 
-    return data;
+    return tile;
   }
 
   moveTileDOM(id,index,animate=true){
-    const tile = this.tiles.get(id);
+    const element = this.tileElements.get(id);
+    if(!element) { return; }
     const pos = this.indexToPosition(index);
 
-    tile.index = index;
     if(!animate){
-      tile.element.style.transition = "none";
+      element.style.transition = "none";
     }
 
-    tile.element.style.left = pos.left + "px";
-    tile.element.style.top = pos.top + "px";
-    tile.element.offsetHeight;
-    tile.element.style.transition = "";
+    element.style.left = pos.left + "px";
+    element.style.top = pos.top + "px";
+    
+    if(!animate){
+      element.offsetHeight;
+      element.style.transition = "";
+    }
   }
 
-  updateTileAppearance(id){
-    const tile = this.tiles.get(id);
-    const el = tile.element;
+  updateTileAppearance(id, value){
+    const el = this.tileElements.get(id);
 
     el.style.width = this.cellSize + "px";
     el.style.height = this.cellSize + "px";
-    el.style.fontSize = Math.max( 20, 40 - String(tile.value).length * 4) + "px";
-    el.textContent = tile.value;
+    el.style.fontSize = Math.max( 20, 40 - String(value).length * 4) + "px";
+    el.textContent = value;
 
     const colors = {
       2:"#eee4da",
@@ -181,48 +200,86 @@ class Game {
       2048:"#edc22e"
     };
 
-    el.style.background = colors[tile.value] || "#3c3a32";
-    el.style.color = tile.value >= 8 ? "#fff" : "#776e65";
+    el.style.background = colors[value] || "#3c3a32";
+    el.style.color = value >= 8 ? "#fff" : "#776e65";
   }
 
-  compressLine(values) {
+  compressLine(cells){
     const result = [];
+    const moves = [];
     let scoreGain = 0;
-    let merged = false;
 
-    for (let i = 0; i < values.length; i++) {
-      const current = values[i];
-      if (current === 0) {
+    for(const current of cells){
+      if(!current){
         continue;
       }
-
       const last = result[result.length - 1];
 
-      if (
+      if(
         last &&
         !last.merged &&
-        last.value === current
-      ) {
-        last.value *= 2;
+        last.value === current.value
+      ){
+        const targetPos = result.length - 1;
+        const newValue = last.value * 2;
+
+        last.value = newValue;
         last.merged = true;
-        scoreGain += last.value;
-        merged = true;
-      } else {
-        result.push({ value: current, merged: false });
+        scoreGain += newValue;
+
+        // 残る側
+        moves.push({
+          id: last.id,
+          from: last.source,
+          to: targetPos,
+          merged: true,
+          removed: false,
+          newValue
+        });
+        // 消える側
+        moves.push({
+          id: current.id,
+          from: current.source,
+          to: targetPos,
+          merged: true,
+          removed: true,
+          newValue
+        });
+      }else{
+        result.push({
+          id: current.id,
+          value: current.value,
+          source: current.source,
+          merged: false,
+        });
       }
     }
+    result.forEach((cell,to)=>{
+      const alreadyMerged = moves.some( m => m.id === cell.id);
+      if(!alreadyMerged){
+        moves.push({
+          id: cell.id,
+          from: cell.source,
+          to,
+          merged: false,
+          removed: false,
+          newValue: cell.value
+        });
+      }
+    });
+    const boardLine = result.map(cell => ({
+        id: cell.id,
+        value: cell.value
+    }));
 
-    while (result.length < 4) {
-      result.push({
-        value: 0,
-        merged: false
-      });
+    while(boardLine.length < 4){
+      boardLine.push(null);
     }
 
     return {
-      values: result.map(v => v.value),
+      line: boardLine,
       scoreGain,
-      merged
+      moves
     };
   }
 
@@ -263,20 +320,29 @@ class Game {
   }
 
   startNewGame(){
-    this.board.fill(0);
-    this.tiles.clear();
+    this.board.fill(null);
+    this.tileElements.clear();
     this.tileLayer.innerHTML = "";
+    this.lastMoveInfo = [];
+    this.undostate = null;
+    this.beforestate = null;
+    this.cleared = false;
+    this.gameover = false;
+    this.nexttileid = 1;
     this.score = 0;
-    this.updateScore();
-    this.spawnRandomTile();
-    this.spawnRandomTile();
-    this.syncTilesToBoard();
+
+    this.hidemessage();
+
+    this.updatescore();
+    this.spawnrandomtile();
+    this.spawnrandomtile();
+    this.synctilestoboard();
   }
 
-  getEmptyCells(){
+  getemptycells(){
     const result = [];
     for(let i=0;i<16;i++){
-      if(this.board[i] === 0){
+      if(this.board[i] === null){
         result.push(i);
       }
     }
@@ -284,142 +350,206 @@ class Game {
     return result;
   }
 
-  spawnRandomTile(){
-    const empty = this.getEmptyCells();
-
+  spawnrandomtile(){
+    const empty = this.getemptycells();
     if(empty.length === 0){
       return false;
     }
 
-    const index = empty[ Math.floor( Math.random() * empty.length) ];
-    const value = Math.random() < 0.9 ? 2 : 4;
-
-    this.board[index] = value;
+    const index = empty[ math.floor( math.random() * empty.length) ];
+    this.board[index] = {
+      id: this.nexttileid++,
+      value: math.random() < 0.9 ? 2 : 4
+    };
     return true;
   }
 
-  updateScore(){
-    this.scoreElement.textContent = this.score;
-    this.bestScore = Math.max( this.bestScore, this.score);
-    this.bestElement.textContent = this.bestScore;
+  updatescore(){
+    this.scoreelement.textcontent = this.score;
+    this.bestscore = math.max( this.bestscore, this.score);
+    this.bestelement.textcontent = this.bestscore;
   }
 
-  moveLeft(){
+  moveleft(){
     let changed = false;
-    let totalScore = 0;
+    let totalscore = 0;
 
     for(let row=0;row<4;row++){
-      const line = this.getRow(row);
-      const result = this.compressLine(line);
-
+      const line = this.getrow(row);
+      const cells = line.map((value,col)=>{
+        const index = this.rowcoltoindex(row,col);
+        const tile = this.board[index];
+        return tile
+          ? {
+              ...tile,
+              source:index
+            }
+          : null;
+      });
+      const result = this.compressline(cells);
       if(
-        JSON.stringify(line) !==
-        JSON.stringify(result.values)
+        json.stringify(line) !==
+        json.stringify(result.line)
       ){
         changed = true;
       }
 
-      totalScore += result.scoreGain;
-      this.setRow( row, result.values);
+      totalscore += result.scoregain;
+      this.setrow( row, result.line);
+      for(const move of result.moves){
+        this.lastmoveinfo.push({
+          ...move,
+          to:this.rowcoltoindex(row, move.to)
+        });
+      }
     }
-
-    return { changed, scoreGain:totalScore };
+    return { changed, scoregain:totalscore };
   }
 
-  moveRight(){
+  moveright(){
     let changed = false;
-    let totalScore = 0;
+    let totalscore = 0;
 
     for(let row=0;row<4;row++){
-      const line = this.getRow(row).reverse();
-      const result = this.compressLine(line);
-      const output = result.values.reverse();
-
+      const line = this.getrow(row);
+      const cells = [...line].reverse().map((value, col) => {
+        const index = this.rowcoltoindex(row, 3 - col);
+        const tile = this.board[index];
+        return tile
+          ? {
+              ...tile,
+              source:index
+            }
+          : null;
+      });
+      const result = this.compressline(cells);
+      const output = [...result.line].reverse();
       if(
-        JSON.stringify( this.getRow(row)) !==
-        JSON.stringify(output)
+        json.stringify( this.getrow(row)) !==
+        json.stringify(output)
       ){
         changed = true;
       }
 
-      totalScore += result.scoreGain;
-      this.setRow( row, output);
+      totalscore += result.scoregain;
+      this.setrow(row, output);
+      for(const move of result.moves){
+        this.lastmoveinfo.push({
+          ...move,
+          to:this.rowcoltoindex(row, 3 - move.to)
+        });
+      }
     }
-
-    return { changed, scoreGain:totalScore };
+    return { changed, scoregain:totalscore };
   }
 
-  moveUp(){
+  moveup(){
     let changed = false;
-    let totalScore = 0;
+    let totalscore = 0;
 
     for(let col=0;col<4;col++){
-      const line = this.getColumn(col);
-      const result = this.compressLine(line);
+      const line = this.getcolumn(col);
+      const cells = line.map((value,row)=>{
+        const index = this.rowcoltoindex(row,col);
+        const tile = this.board[index];
+        return tile
+          ? {
+              ...tile,
+              source:index
+            }
+          : null;
+      });
+      const result = this.compressline(cells);
 
       if(
-        JSON.stringify(line) !==
-        JSON.stringify(result.values)
+        json.stringify(line) !==
+        json.stringify(result.line)
       ){
         changed = true;
       }
 
-      totalScore += result.scoreGain;
-      this.setColumn( col, result.values);
+      totalscore += result.scoregain;
+      this.setcolumn( col, result.line);
+      
+      for (const move of result.moves) {
+        this.lastmoveinfo.push({
+          ...move,
+          to: this.rowcoltoindex(move.to, col)
+        });
+      }
     }
 
-    return { changed, scoreGain:totalScore };
+    return { changed, scoregain:totalscore };
   }
 
-  moveDown(){
+  movedown(){
     let changed = false;
-    let totalScore = 0;
+    let totalscore = 0;
 
     for(let col=0;col<4;col++){
-      const line = this.getColumn(col).reverse();
-      const result = this.compressLine(line);
-      const output = result.values.reverse();
+      const line = this.getcolumn(col);
+      const cells = [...line].reverse().map((value, row) => {
+        const index = this.rowcoltoindex(3 - row, col);
+        const tile = this.board[index];
+        return tile
+          ? {
+              ...tile,
+              source:index
+            }
+          : null;
+      });
+      const result = this.compressline(cells);
+      const output = [...result.line].reverse();
 
       if(
-        JSON.stringify( this.getColumn(col)) !==
-        JSON.stringify(output)
+        json.stringify( this.getcolumn(col)) !==
+        json.stringify(output)
       ){
         changed = true;
       }
 
-      totalScore += result.scoreGain;
-      this.setColumn( col, output);
+      totalscore += result.scoregain;
+      this.setcolumn( col, output);
+      
+      for (const move of result.moves) {
+        this.lastmoveinfo.push({
+          ...move,
+          to: this.rowcoltoindex( 3 - move.to, col)
+        });
+      }
     }
-
-    return { changed, scoreGain:totalScore };
+    return { changed, scoregain:totalscore };
   }
 
   move(direction){
     if(this.animating){ return; }
-    if(this.gameOver){ return; }
+    if(this.gameover){ return; }
 
-    this.saveUndoState();
-    const before = [...this.board];
+    this.savebeforestate();
+    this.lastmoveinfo = [];
 
     let result;
     switch(direction){
       case "left":
-        result=this.moveLeft();
+        result=this.moveleft();
         break;
       case "right":
-        result=this.moveRight();
+        result=this.moveright();
         break;
       case "up":
-        result=this.moveUp();
+        result=this.moveup();
         break;
       case "down":
-        result=this.moveDown();
+        result=this.movedown();
         break;
     }
 
     if(!result.changed){
+      this.beforestate = null;
       return;
     }
+    this.undostate = this.beforestate;
+    this.beforestate = null;
     this.animating = true;
     this.score += result.scoreGain;
     this.updateScore();
@@ -441,9 +571,10 @@ class Game {
     },130);
   }
 
-  saveUndoState(){
-    this.undoState = {
-      board:[...this.board],
+  saveBeforeState(){
+    this.beforeState = {
+      board:structuredClone(this.board),
+      nextTileId:this.nextTileId,
       score:this.score,
       cleared:this.cleared,
       gameOver:this.gameOver
@@ -453,6 +584,7 @@ class Game {
   saveGame(){
     const data = {
       board:this.board,
+      nextTileId:this.nextTileId,
       score:this.score,
       bestScore:this.bestScore,
       undoState:this.undoState,
@@ -469,45 +601,84 @@ class Game {
       return;
     }
     const data = JSON.parse(raw);
+
+    this.tileElements.clear();
+    this.tileLayer.innerHTML = "";
+    this.lastMoveInfo = [];
+
     this.board = data.board;
+    this.nextTileId = data.nextTileId;
     this.score = data.score || 0;
     this.bestScore = data.bestScore || 0;
+    this.beforeState = null;
     this.undoState = data.undoState || null;
     this.cleared = data.cleared || false;
     this.gameOver = data.gameOver || false;
     this.updateScore();
     this.syncTilesToBoard();
+    if(this.gameOver){
+      this.showMessage( "GAME OVER");
+    }
   }
 
   syncTilesToBoard(){
-    const existing = new Map();
+    const aliveIds = new Set();
 
-    for(const tile of this.tiles.values()){
-      existing.set( tile.index, tile);
-    }
-
-    for(let index=0;index<16;index++){
-      const value = this.board[index];
-      const tile = existing.get(index);
-
-      if(value===0){
-        if(tile){
-          tile.element.remove();
-          this.tiles.delete(tile.id);
-        }
-
+    for(const move of this.lastMoveInfo){
+      const element = this.tileElements.get(move.id);
+      if(!element){
         continue;
       }
-      if(tile){
-        if(tile.value!==value){
-          tile.value=value;
-          this.updateTileAppearance(tile.id);
+      this.moveTileDOM( move.id, move.to, true);
+
+      if(move.removed){
+        element.classList.add( "tile-merge-remove");
+
+        setTimeout(()=>{
+          element.remove();
+          this.tileElements.delete(move.id);
+        },120);
+      }else{
+        aliveIds.add(move.id);
+        if(move.merged){
+          const tileData = this.board[move.to];
+          if(tileData) {
+            this.updateTileAppearance(
+              move.id,
+              tileData.value
+            );
+          }
+          element.classList.remove("tile-pop");
+          void element.offsetWidth;
+          element.classList.add("tile-pop");
         }
+      }
+    }
+
+    // 盤面上に存在する全ID
+    const boardIds = new Set();
+    for(let index=0; index<16; index++){
+      const tileData = this.board[index];
+      if(!tileData){
         continue;
       }
-      const newTile = this.createTile(value, index);
-      newTile.element.classList.add( "tile-new");
+      boardIds.add(tileData.id);
+
+      // 新規生成タイル
+      const isExistTile = this.tileElements.has(tileData.id);
+      if(!isExistTile){
+        const element = this.createTile(tileData, index);
+        element.classList.add("tile-new");
+      }
     }
+    // 念のため孤立DOM掃除
+    for(const [id, element] of this.tileElements){
+      if(!boardIds.has(id)){
+        element.remove();
+        this.tileElements.delete(id);
+      }
+    }
+    this.lastMoveInfo = [];
   }
 
   showMessage(text){
@@ -526,8 +697,8 @@ class Game {
       return;
     }
 
-    for(const value of this.board){
-      if(value === 2048){
+    for(const tile of this.board){
+      if(tile && tile.value === 2048){
         this.cleared = true;
         this.showMessage(
           "2048!"
@@ -543,22 +714,30 @@ class Game {
 
   canMove(){
     for(let i=0;i<16;i++){
-      if(this.board[i]===0){
+      if(this.board[i] === null){
         return true;
       }
     }
     for(let r=0;r<4;r++){
       for(let c=0;c<4;c++){
         const idx = r*4+c;
-        const value = this.board[idx];
+        const tile = this.board[idx];
         if(c<3){
-          if( value === this.board[idx+1]){
+          const right = this.board[idx + 1];
+          if(
+            tile && right &&
+            tile.value === right.value
+          ){
             return true;
           }
         }
 
         if(r<3){
-          if( value === this.board[idx+4]){
+          const down = this.board[idx + 4];
+          if(
+            tile && down &&
+            tile.value === down.value
+          ){
             return true;
           }
         }
