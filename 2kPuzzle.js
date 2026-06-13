@@ -1,6 +1,8 @@
 class Game {
 	static SIZE = 4;
 	static CELL_COUNT = 16;
+  static CELL_GAP = 10;
+  static BOARD_PADDING = 10;
 
 	constructor() {
 		this.boardElement = document.getElementById("board");
@@ -21,11 +23,8 @@ class Game {
 		this.nextTileId = 1;
 		this.score = 0;
 		this.bestScore = 0;
-
 		this.animating = false;
-
 		this.cellSize = 0; // calculateLayout()で決定する
-		this.CELLGAP = 10;
 
 		this.createBackgroundCells();
 		this.calculateLayout();
@@ -125,7 +124,7 @@ class Game {
 
 	calculateLayout() {
 		const padding = 10;
-		const gap = this.CELLGAP;
+		const gap = Game.CELL_GAP;
 		const width = this.boardElement.clientWidth;
 
 		this.cellSize = (width - padding * 2 - gap * 3) / 4;
@@ -136,8 +135,8 @@ class Game {
 		const col = index % 4;
 
 		return {
-			left: 10 + col * (this.cellSize + this.CELLGAP),
-			top: 10 + row * (this.cellSize + this.CELLGAP),
+			left: Game.BOARD_PADDING + col * (this.cellSize + Game.CELL_GAP),
+			top: Game.BOARD_PADDING + row * (this.cellSize + Game.CELL_GAP),
 		};
 	}
 
@@ -546,14 +545,13 @@ class Game {
 
 		if (result.scoreGain > 0) {
 			this.sound.merge();
-			navigator.vibrate?.(40);
 		} else {
 			this.sound.move();
 		}
 
 		this.animateMoves();
-		await this.waitMoveAnimation();
-		this.applyMergeResult();
+		await this.sleep(140);
+		this.applyMoveResult();
 		await this.sleep(40);
 		this.animateMergedTiles();
 		await this.sleep(140);
@@ -626,32 +624,6 @@ class Game {
 		}
 	}
 
-	waitMoveAnimation() {
-		const movingElements = [];
-
-		for (const move of this.currentMoveRecords) {
-			if (move.from !== move.to) {
-				const element = this.tileElements.get(move.id);
-				if (element) {
-					movingElements.push(element);
-				}
-			}
-		}
-
-		if (movingElements.length === 0) {
-			return Promise.resolve();
-		}
-
-		return Promise.all(
-			movingElements.map(
-				(element) =>
-					new Promise((resolve) => {
-						element.addEventListener("transitionend", resolve, { once: true });
-					}),
-			),
-		);
-	}
-
 	animateMergedTiles() {
 		for (const move of this.currentMoveRecords) {
 			const element = this.tileElements.get(move.id);
@@ -674,7 +646,7 @@ class Game {
 		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 
-	applyMergeResult() {
+	applyMoveResult() {
 		for (const move of this.currentMoveRecords) {
 			if (move.removed) {
 				const el = this.tileElements.get(move.id);
@@ -784,3 +756,4 @@ window.addEventListener("load", () => {
 	window.game = new Game();
 	game.loadGame();
 });
+
