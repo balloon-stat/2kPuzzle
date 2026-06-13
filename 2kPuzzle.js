@@ -25,8 +25,8 @@ class Game {
 
     this.animating = false;
 
-    this.cellSize = 0;
-    this.cellGap = 10;
+    this.cellSize = 0; // calculateLayout()で決定する
+    this.CELLGAP = 10; 
 
     this.createBackgroundCells();
     this.calculateLayout();
@@ -65,13 +65,7 @@ class Game {
     // DOM全再構築
     this.tileLayer.innerHTML = "";
     this.tileElements.clear();
-    for(let index=0; index<16; index++){
-      const tileData = this.board[index];
-      if(tileData){
-        this.createTile(tileData, index);
-      }
-    }
-
+    this.syncTilesToBoard();
     this.saveGame();
   }
 
@@ -123,7 +117,7 @@ class Game {
   createBackgroundCells() {
     const layer = document.querySelector(".cell-layer");
 
-    for(let i=0;i<16;i++){
+    for(let i=0;i<Game.CELL_COUNT;i++){
       const cell = document.createElement("div");
 
       cell.className = "cell";
@@ -132,8 +126,11 @@ class Game {
   }
 
   calculateLayout() {
+    const padding = 10;
+    const gap = this.CELLGAP;
     const width = this.boardElement.clientWidth;
-    this.cellSize = (width - 50) / 4;
+
+    this.cellSize = (width - padding*2 - gap*3) / 4;
   }
 
   indexToPosition(index){
@@ -141,21 +138,18 @@ class Game {
     const col = index % 4;
 
     return {
-      left: 10 + col * (this.cellSize + this.cellGap),
-      top: 10 + row * (this.cellSize + this.cellGap)
+      left: 10 + col * (this.cellSize + this.CELLGAP),
+      top: 10 + row * (this.cellSize + this.CELLGAP)
     };
   }
   
-  createTile(tileData, index){
-    const id = tileData.id;
+  createTile(boardValue){
     const tile = document.createElement("div");
 
     tile.className = "tile";
-    tile.dataset.id = id;
+    tile.dataset.id = boardValue.id;
     this.tileLayer.appendChild(tile);
-    this.tileElements.set( id, tile );
-    this.updateTileAppearance(id, tileData.value);
-    this.moveTileDOM(id,index,false);
+    this.tileElements.set( boardValue.id, tile );
 
     return tile;
   }
@@ -334,14 +328,14 @@ class Game {
     this.hideMessage();
 
     this.updateScore();
-    this.spawnRandomTile();
-    this.spawnRandomTile();
+    this.spawnValue();
+    this.spawnValue();
     this.syncTilesToBoard();
   }
 
   getEmptyCells(){
     const result = [];
-    for(let i=0;i<16;i++){
+    for(let i=0;i<Game.CELL_COUNT;i++){
       if(this.board[i] === null){
         result.push(i);
       }
@@ -350,7 +344,7 @@ class Game {
     return result;
   }
 
-  spawnRandomTile(){
+  spawnValue(){
     const empty = this.getEmptyCells();
     if(empty.length === 0){
       return false;
@@ -521,7 +515,7 @@ class Game {
     return { changed, scoreGain:totalScore };
   }
 
-  move(direction){
+  async move(direction){
     if(this.animating){ return; }
     if(this.gameOver){ return; }
 
@@ -542,6 +536,9 @@ class Game {
       case "down":
         result=this.moveDown();
         break;
+      default:
+        console.error("move at not direction: ${direction}");
+        return;
     }
 
     if(!result.changed){
@@ -561,14 +558,19 @@ class Game {
       this.sound.move();
     }
 
-    setTimeout(()=>{
-      this.spawnRandomTile();
-      this.syncTilesToBoard();
-      this.checkClear();
-      this.checkGameOver();
-      this.saveGame();
-      this.animating=false;
-    },130);
+    this.animateMoves();
+    await this.waitMoveAnimation();
+    this.applyMergeResult();
+    await this.delay(40);
+    this.animateMergedTiles();
+    await this.delay(140);
+    this.spawnValue();
+    this.syncTilesToBoard(true);
+    this.checkClear();
+    this.checkGameOver();
+    this.saveGame();
+    this.animating=false;
+    this.lastMoveInfo = [];
   }
 
   saveBeforeState(){
@@ -621,64 +623,100 @@ class Game {
     }
   }
 
-  syncTilesToBoard(){
-    const aliveIds = new Set();
-
+  animateMoves(){
     for(const move of this.lastMoveInfo){
       const element = this.tileElements.get(move.id);
       if(!element){
         continue;
       }
       this.moveTileDOM( move.id, move.to, true);
+    }
+  }
 
-      if(move.removed){
-        element.classList.add( "tile-merge-remove");
+  waitMoveAnimation() {
+    const movingElements = [];
 
-        setTimeout(()=>{
-          element.remove();
-          this.tileElements.delete(move.id);
-        },120);
-      }else{
-        aliveIds.add(move.id);
-        if(move.merged){
-          const tileData = this.board[move.to];
-          if(tileData) {
-            this.updateTileAppearance(
-              move.id,
-              tileData.value
-            );
-          }
-          element.classList.remove("tile-pop");
-          void element.offsetWidth;
-          element.classList.add("tile-pop");
+    for (const move of this.lastMoveInfo) {
+      if (move.from !== move.to) {
+        const element = this.tileElements.get(move.id);
+        if (element) {
+          movingElements.push(element);
         }
       }
     }
 
-    // 盤面上に存在する全ID
-    const boardIds = new Set();
-    for(let index=0; index<16; index++){
-      const tileData = this.board[index];
-      if(!tileData){
+    if (movingElements.length === 0) {
+      return Promise.resolve();
+    }
+
+    return Promise.all(
+      movingElements.map(element =>
+        new Promise(resolve => {
+          element.addEventListener(
+            "transitionend",
+            resolve,
+            { once: true }
+          );
+        })
+      )
+    );
+  }
+
+  animateMergedTiles(){
+    for(const move of this.lastMoveInfo){
+      const element = this.tileElements.get(move.id);
+      if(!element){
         continue;
       }
-      boardIds.add(tileData.id);
+      if(move.merged && !move.removed){
+        element.classList.add("tile-pop");
+
+        element.addEventListener( "animationend", () =>
+          element.classList.remove("tile-pop"),
+          { once:true }
+        );
+      }
+    }
+  }
+
+  delay(ms){
+    return new Promise(resolve =>
+      setTimeout(resolve, ms)
+    );
+  }
+
+  applyMergeResult(){
+    for(const move of this.lastMoveInfo){
+      if(move.removed){
+        const el = this.tileElements.get(move.id);
+        if(el){
+          el.remove();
+          this.tileElements.delete(move.id);
+        }
+      }else if(move.merged){
+          this.updateTileAppearance( move.id, move.newValue);
+      }
+    }
+  }
+
+  syncTilesToBoard(animateNew=false){
+    for(let index=0; index<Game.CELL_COUNT; index++){
+      const tile = this.board[index];
+      if(!tile){ continue; }
 
       // 新規生成タイル
-      const isExistTile = this.tileElements.has(tileData.id);
-      if(!isExistTile){
-        const element = this.createTile(tileData, index);
-        element.classList.add("tile-new");
+      if(!this.tileElements.has(tile.id)){
+        const element = this.createTile(tile);
+        if(animateNew){
+          element.classList.add("tile-new");
+          element.addEventListener( "animationend", () =>
+            element.classList.remove("tile-new"),
+            { once:true });
+        }
       }
+      this.updateTileAppearance(tile.id, tile.value);
+      this.moveTileDOM(tile.id,index,false);
     }
-    // 念のため孤立DOM掃除
-    for(const [id, element] of this.tileElements){
-      if(!boardIds.has(id)){
-        element.remove();
-        this.tileElements.delete(id);
-      }
-    }
-    this.lastMoveInfo = [];
   }
 
   showMessage(text){
@@ -713,7 +751,7 @@ class Game {
   }
 
   canMove(){
-    for(let i=0;i<16;i++){
+    for(let i=0;i<Game.CELL_COUNT;i++){
       if(this.board[i] === null){
         return true;
       }
