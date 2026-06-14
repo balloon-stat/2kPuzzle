@@ -35,11 +35,8 @@ class Game {
 		});
 
 		document.getElementById("newButton").addEventListener("click", () => {
-			const ok = confirm("現在のゲームを破棄して新しいゲームを開始しますか？");
-			if (ok) {
-				this.startNewGame();
-				this.saveGame();
-			}
+      this.startNewGame();
+      this.saveGame();
 		});
 		document
 			.getElementById("undoButton")
@@ -543,14 +540,12 @@ class Game {
 		this.score += result.scoreGain;
 		this.updateScore();
 
-		if (result.scoreGain > 0) {
-			this.sound.merge();
-		} else {
-			this.sound.move();
-		}
-
+    this.sound.move();
 		this.animateMoves();
 		await this.sleep(140);
+		if (result.scoreGain > 0) {
+			this.sound.merge();
+		}
 		this.applyMoveResult();
 		await this.sleep(40);
 		this.animateMergedTiles();
