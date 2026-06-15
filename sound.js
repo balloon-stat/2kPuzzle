@@ -1,6 +1,7 @@
 class Sound {
   constructor() {
     this.audioContext = null;
+    this.periodicWaveCache = new Map();
     this.waveBuffer = [
       0,
       1.0,
@@ -16,6 +17,18 @@ class Sound {
       this.audioContext = new AudioContext();
     }
     return this.audioContext;
+  }
+
+  getPeriodicWave(samples) {
+    const key = samples.join(",");
+
+    if (!this.periodicWaveCache.has(key)) {
+      this.periodicWaveCache.set(
+        key,
+        this.createPeriodicWave(samples)
+      );
+    }
+    return this.periodicWaveCache.get(key);
   }
 
   play(freq, duration, type = "square", volume = 0.1) {
@@ -65,6 +78,7 @@ class Sound {
     const attackTime   = p.attackTime ?? 0.005;
 
     const noiseSmooth  = p.noiseSmooth ?? 0;
+    const smoothCount  = p.smoothCount ?? 0;
 
     let sourceNode;
     const gainNode = ctx.createGain();
@@ -73,7 +87,8 @@ class Sound {
       sourceNode = ctx.createBufferSource();
       sourceNode.buffer = this.createNoiseBuffer(
         duration,
-        noiseSmooth
+        noiseSmooth,
+        smoothCount
       );
     } else {
       sourceNode = ctx.createOscillator();
@@ -132,48 +147,99 @@ class Sound {
   }
 
   createPeriodicWave(samples) {
+    this.validateSamples(samples);
     const ctx = this.getContext();
+    const N = samples.length;
 
-    const real = new Float32Array(samples.length);
-    const imag = new Float32Array(samples.length);
+    const real = new Float32Array(N / 2 + 1);
+    const imag = new Float32Array(N / 2 + 1);
 
-    for (let i = 1; i < samples.length; i++) {
-      imag[i] = samples[i];
+    // DFT
+    for (let k = 0; k <= N / 2; k++) {
+      let re = 0;
+      let im = 0;
+
+      for (let n = 0; n < N; n++) {
+        const phase = (2 * Math.PI * k * n) / N;
+
+        re += samples[n] * Math.cos(phase);
+        im -= samples[n] * Math.sin(phase);
+      }
+      real[k] = re / N;
+      imag[k] = im / N;
     }
 
-    return ctx.createPeriodicWave(real, imag);
+    return ctx.createPeriodicWave(real, imag, {
+      disableNormalization: false,
+    });
   }
 
-  createNoiseBuffer(duration = 0.1, lowPassAmount = 0) {
-    const ctx = this.getContext();
-    const length = Math.floor(ctx.sampleRate * duration);
-    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-
-    let lastOut = 0;
-
+  validateSamples(samples) {
+    if (!Array.isArray(samples) && !(samples instanceof Float32Array)) {
+      throw new TypeError("samples must be an Array or Float32Array");
+    }
+    const length = samples.length;
+    if (length < 64 || length > 256) {
+      throw new RangeError("samples length must be between 64 and 256");
+    }
+    if ((length & (length - 1)) !== 0) {
+      throw new RangeError("samples length must be a power of two");
+    }
     for (let i = 0; i < length; i++) {
-      const white = Math.random() * 2 - 1;
-
-      if (lowPassAmount > 0) {
-        data[i] = (1 - lowPassAmount) * white + lowPassAmount * lastOut;
-        lastOut = data[i];
-      } else {
-        data[i] = white;
+      const value = samples[i];
+      if (!Number.isFinite(value)) {
+        throw new TypeError(`samples[${i}] must be a finite number`);
+      }
+      if (Math.abs(value) > 1) {
+        throw new RangeError(`samples[${i}] must be between -1 and 1`);
       }
     }
-
-    return buffer;
   }
+
+  createNoiseBuffer(duration, smoothAmount = 0.9, smoothPasses = 2) {
+  const ctx = this.getContext();
+  const length = Math.floor(ctx.sampleRate * duration);
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  // ホワイトノイズ生成
+  for (let i = 0; i < length; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+
+  // 平滑化
+  for (let pass = 0; pass < smoothPasses; pass++) {
+    let last = data[0];
+    for (let i = 1; i < length; i++) {
+      last = smoothAmount * last + (1 - smoothAmount) * data[i];
+      data[i] = last;
+    }
+  }
+
+  // 音量低下を補正
+  let peak = 0;
+  for (let i = 0; i < length; i++) {
+    peak = Math.max(peak, Math.abs(data[i]));
+  }
+  if (peak > 0) {
+    const gain = 1 / peak;
+    for (let i = 0; i < length; i++) {
+      data[i] *= gain;
+    }
+  }
+
+  return buffer;
+}
 
   // タイル移動の効果音
   move() {
     this.playSynth({
       type: "noise",
       duration: 0.07,
-      volume: 0.09,
+      volume: 0.38,
 
       noiseSmooth: 0.85,
+      smoothCount: 3,
 
       filterType: "bandpass",
       filterFreq: 4000,
@@ -243,6 +309,17 @@ class Sound {
       freqEnd: 550,
       freqTime: 0.25
     }, 0.08);
+
+
+    this.playSynth({
+      type: "triangle",
+      duration: 0.15,
+      volume: 0.1,
+      freqStart: 780,
+      freqEnd: 700,       // ほんの少しだけピッチを下げて「ガッカリ感」を出す
+      freqTime: 0.3
+    }, 0.28);
+
   }
 }
 

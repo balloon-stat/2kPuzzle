@@ -545,6 +545,7 @@ class Game {
 		await this.sleep(140);
 		if (result.scoreGain > 0) {
 			this.sound.merge();
+      navigator.vibrate?.(10);
 		}
 		this.applyMoveResult();
 		await this.sleep(40);
