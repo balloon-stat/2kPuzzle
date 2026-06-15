@@ -52,7 +52,7 @@ h1{
   margin-bottom:12px;
 }
 
-.button-area button{
+.button-area > button{
   flex:1;
   height:44px;
   border:none;
@@ -72,9 +72,14 @@ h1{
   touch-action:none;
 }
 
-.cell-layer{
+.cell-layer,
+.tile-layer,
+.message{
   position:absolute;
   inset:0;
+}
+
+.cell-layer{
   display:grid;
   grid-template-columns:repeat(4,1fr);
   grid-template-rows:repeat(4,1fr);
@@ -88,16 +93,18 @@ h1{
 }
 
 .tile-layer{
-  position:absolute;
-  inset:0;
   pointer-events:none;
+}
+
+.tile,
+.message{
+  display:flex;
+  justify-content:center;
+  align-items:center;
 }
 
 .tile{
   position:absolute;
-  display:flex;
-  justify-content:center;
-  align-items:center;
   border-radius:8px;
   font-weight:bold;
   transition:
@@ -108,11 +115,6 @@ h1{
 }
 
 .message{
-  position:absolute;
-  inset:0;
-  display:flex;
-  justify-content:center;
-  align-items:center;
   font-size:42px;
   font-weight:bold;
   background:rgba(255,255,255,0.75);

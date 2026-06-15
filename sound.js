@@ -30,7 +30,7 @@ class Sound {
     const gain = ctx.createGain();
 
     if (Array.isArray(type)) {
-      osc.setPeriodicWave(this.createPeriodicWave(type));
+      osc.setPeriodicWave(this.getPeriodicWave(type));
     } else {
       osc.type = type;
     }
@@ -83,13 +83,8 @@ class Sound {
       sourceNode = ctx.createOscillator();
       sourceNode.type = type;
 
-      sourceNode.frequency.setValueAtTime(freqStart, time);
-      sourceNode.frequency.exponentialRampToValueAtTime(
-        freqEnd,
-        time + freqTime
-      );
+      this.rampFrequency(sourceNode.frequency, freqStart, freqEnd, time, freqTime);
     }
-
     let lastNode = sourceNode;
 
     if (filterType) {
@@ -98,41 +93,44 @@ class Sound {
       filterNode.type = filterType;
       filterNode.Q.value = filterQ;
 
-      filterNode.frequency.setValueAtTime(
-        filterFreq,
-        time
-      );
-
-      if (filterFreqEnd !== filterFreq) {
-        filterNode.frequency.linearRampToValueAtTime(
-          filterFreqEnd,
-          time + duration
-        );
-      }
+      this.rampFrequency(filterNode.frequency, filterFreq, filterFreqEnd, time, duration);
 
       lastNode.connect(filterNode);
       lastNode = filterNode;
     }
-
     lastNode.connect(gainNode);
 
-    gainNode.gain.setValueAtTime(0.001, time);
-    gainNode.gain.linearRampToValueAtTime(
-      volStart,
-      time + attackTime
-    );
-    gainNode.gain.exponentialRampToValueAtTime(
-      0.001,
-      time + duration
-    );
+    this.applyEnvelope(gainNode.gain, time, attackTime, volStart, duration);
 
     gainNode.connect(ctx.destination);
-
     sourceNode.start(time);
 
     if (type !== "noise") {
       sourceNode.stop(time + duration);
     }
+  }
+
+  rampFrequency(param, start, end, startTime, duration) {
+    param.setValueAtTime(start, startTime);
+
+    if (start !== end) {
+      param.exponentialRampToValueAtTime(
+        end,
+        startTime + duration
+      );
+    }
+  }
+
+  applyEnvelope(gain, time, attack, volume, duration) {
+    gain.setValueAtTime(0.001, time);
+    gain.linearRampToValueAtTime(
+      volume,
+      time + attack
+    );
+    gain.exponentialRampToValueAtTime(
+      0.001,
+      time + duration
+    );
   }
 
   createPeriodicWave(samples) {
@@ -186,39 +184,44 @@ class Sound {
   }
 
   createNoiseBuffer(duration, smoothAmount = 0.9, smoothPasses = 2) {
-  const ctx = this.getContext();
-  const length = Math.floor(ctx.sampleRate * duration);
-  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-
-  // ホワイトノイズ生成
-  for (let i = 0; i < length; i++) {
-    data[i] = Math.random() * 2 - 1;
+    const ctx = this.getContext();
+    const length = Math.floor(ctx.sampleRate * duration);
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    this.generateWhiteNoise(data);
+    this.smoothNoise(data, smoothAmount, smoothPasses);
+    this.normalizeAudio(data);
+    return buffer;
   }
 
-  // 平滑化
-  for (let pass = 0; pass < smoothPasses; pass++) {
-    let last = data[0];
-    for (let i = 1; i < length; i++) {
-      last = smoothAmount * last + (1 - smoothAmount) * data[i];
-      data[i] = last;
+  generateWhiteNoise(data) {
+    for (let i = 0; i < data.length; i++) {
+      data[i] = Math.random() * 2 - 1;
     }
   }
 
-  // 音量低下を補正
-  let peak = 0;
-  for (let i = 0; i < length; i++) {
-    peak = Math.max(peak, Math.abs(data[i]));
-  }
-  if (peak > 0) {
-    const gain = 1 / peak;
-    for (let i = 0; i < length; i++) {
-      data[i] *= gain;
+  smoothNoise(data, amount, passes) {
+    for (let pass = 0; pass < passes; pass++) {
+      let last = data[0];
+      for (let i = 1; i < data.length; i++) {
+        last = amount * last + (1 - amount) * data[i];
+        data[i] = last;
+      }
     }
   }
 
-  return buffer;
-}
+  normalizeAudio(data) {
+    let peak = 0;
+    for (let i = 0; i < data.length; i++) {
+      peak = Math.max(peak, Math.abs(data[i]));
+    }
+    if (peak > 0) {
+      const gain = 1 / peak;
+      for (let i = 0; i < length; i++) {
+        data[i] *= gain;
+      }
+    }
+  }
 
   // タイル移動の効果音
   move() {
@@ -296,8 +299,6 @@ class Sound {
 
   // ピロン　ゲームオーバー
   gameOver() {
-    const ctx = this.getContext();
-    const now = ctx.currentTime;
 
     this.playSynth({
       type: "triangle",

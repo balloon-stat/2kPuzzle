@@ -3,6 +3,19 @@ class Game {
 	static CELL_COUNT = 16;
   static CELL_GAP = 10;
   static BOARD_PADDING = 10;
+  static TILE_COLORS = {
+			2: "#eee4da",
+			4: "#ede0c8",
+			8: "#f2b179",
+			16: "#f59563",
+			32: "#f67c5f",
+			64: "#f65e3b",
+			128: "#edcf72",
+			256: "#edcc61",
+			512: "#edc850",
+			1024: "#edc53f",
+			2048: "#edc22e",
+	};
 
 	constructor() {
 		this.boardElement = document.getElementById("board");
@@ -14,9 +27,8 @@ class Game {
 
 		this.board = new Array(Game.CELL_COUNT).fill(null);
 		this.tileElements = new Map();
-		this.currentMoveRecords = [];
+		this.moveRecords = [];
 		this.undoState = null;
-		this.beforeState = null;
 
 		this.setupInput();
 
@@ -44,17 +56,9 @@ class Game {
 	}
 
 	undo() {
-		if (!this.undoState) {
-			return;
-		}
-		if (this.gameOver) {
-			this.hideMessage();
-		}
-		this.board = structuredClone(this.undoState.board);
-		this.nextTileId = this.undoState.nextTileId;
-		this.score = this.undoState.score;
-		this.cleared = this.undoState.cleared;
-		this.gameOver = this.undoState.gameOver;
+		if (!this.undoState) { return; }
+		if (this.gameOver) { this.hideMessage(); }
+    this.restoreSnapshot(this.undoState);
 		this.updateScore();
 
 		this.tileLayer.innerHTML = "";
@@ -62,6 +66,24 @@ class Game {
 		this.syncTilesToBoard();
 		this.saveGame();
 	}
+
+  createSnapshot() {
+    return {
+      board: structuredClone(this.board),
+      nextTileId: this.nextTileId,
+      score: this.score,
+      cleared: this.cleared,
+      gameOver: this.gameOver,
+    };
+  } 
+
+  restoreSnapshot(snapshot) {
+    this.board = structuredClone(snapshot.board);
+    this.nextTileId = snapshot.nextTileId;
+    this.score = snapshot.score;
+    this.cleared = snapshot.cleared;
+    this.gameOver = snapshot.gameOver;
+  }
 
 	setupInput() {
 		const board = this.boardElement;
@@ -120,20 +142,24 @@ class Game {
 	}
 
 	calculateLayout() {
-		const padding = 10;
+		const pad = Game.BOARD_PADDING;
 		const gap = Game.CELL_GAP;
+		const size = Game.SIZE;
 		const width = this.boardElement.clientWidth;
 
-		this.cellSize = (width - padding * 2 - gap * 3) / 4;
+		this.cellSize = (width - pad * 2 - gap * (size - 1)) / size;
 	}
 
 	indexToPosition(index) {
-		const row = Math.floor(index / 4);
-		const col = index % 4;
+		const pad = Game.BOARD_PADDING;
+		const gap = Game.CELL_GAP;
+		const size = Game.SIZE;
+		const row = Math.floor(index / size);
+		const col = index % size;
 
 		return {
-			left: Game.BOARD_PADDING + col * (this.cellSize + Game.CELL_GAP),
-			top: Game.BOARD_PADDING + row * (this.cellSize + Game.CELL_GAP),
+			left: pad + col * (this.cellSize + gap),
+			top: pad + row * (this.cellSize + gap),
 		};
 	}
 
@@ -183,21 +209,7 @@ class Game {
 		el.style.fontSize = `${Math.max(20, 40 - String(value).length * 4)}px`;
 		el.textContent = value;
 
-		const colors = {
-			2: "#eee4da",
-			4: "#ede0c8",
-			8: "#f2b179",
-			16: "#f59563",
-			32: "#f67c5f",
-			64: "#f65e3b",
-			128: "#edcf72",
-			256: "#edcc61",
-			512: "#edc850",
-			1024: "#edc53f",
-			2048: "#edc22e",
-		};
-
-		el.style.background = colors[value] || "#3c3a32";
+		el.style.background = Game.TILE_COLORS[value] || "#3c3a32";
 		el.style.color = value >= 8 ? "#fff" : "#776e65";
 	}
 
@@ -265,7 +277,7 @@ class Game {
 			value: cell.value,
 		}));
 
-		while (boardLine.length < 4) {
+		while (boardLine.length < Game.SIZE) {
 			boardLine.push(null);
 		}
 
@@ -277,35 +289,37 @@ class Game {
 	}
 
 	rowColToIndex(row, col) {
-		return row * 4 + col;
+		return row * Game.SIZE + col;
 	}
 
 	getRow(row) {
+    const sz = Game.SIZE;
 		return [
-			this.board[row * 4],
-			this.board[row * 4 + 1],
-			this.board[row * 4 + 2],
-			this.board[row * 4 + 3],
+			this.board[row * sz],
+			this.board[row * sz + 1],
+			this.board[row * sz + 2],
+			this.board[row * sz + 3],
 		];
 	}
 
 	setRow(row, data) {
-		for (let col = 0; col < 4; col++) {
+		for (let col = 0; col < Game.SIZE; col++) {
 			this.board[this.rowColToIndex(row, col)] = data[col];
 		}
 	}
 
 	getColumn(col) {
+    const sz = Game.SIZE;
 		return [
 			this.board[col],
-			this.board[col + 4],
-			this.board[col + 8],
-			this.board[col + 12],
+			this.board[col + sz],
+			this.board[col + sz * 2],
+			this.board[col + sz * 3],
 		];
 	}
 
 	setColumn(col, data) {
-		for (let row = 0; row < 4; row++) {
+		for (let row = 0; row < Game.SIZE; row++) {
 			this.board[this.rowColToIndex(row, col)] = data[row];
 		}
 	}
@@ -314,9 +328,8 @@ class Game {
 		this.board.fill(null);
 		this.tileElements.clear();
 		this.tileLayer.innerHTML = "";
-		this.currentMoveRecords = [];
+		this.moveRecords = [];
 		this.undoState = null;
-		this.beforeState = null;
 		this.cleared = false;
 		this.gameOver = false;
 		this.nextTileId = 1;
@@ -365,7 +378,7 @@ class Game {
 		let changed = false;
 		let totalScore = 0;
 
-		for (let row = 0; row < 4; row++) {
+		for (let row = 0; row < Game.SIZE; row++) {
 			const line = this.getRow(row);
 			const cells = line.map((_val, col) => {
 				const index = this.rowColToIndex(row, col);
@@ -385,7 +398,7 @@ class Game {
 			totalScore += result.scoreGain;
 			this.setRow(row, result.line);
 			for (const move of result.moves) {
-				this.currentMoveRecords.push({
+				this.moveRecords.push({
 					...move,
 					to: this.rowColToIndex(row, move.to),
 				});
@@ -398,7 +411,7 @@ class Game {
 		let changed = false;
 		let totalScore = 0;
 
-		for (let row = 0; row < 4; row++) {
+		for (let row = 0; row < Game.SIZE; row++) {
 			const line = this.getRow(row);
 			const cells = [...line].reverse().map((_val, col) => {
 				const index = this.rowColToIndex(row, 3 - col);
@@ -419,7 +432,7 @@ class Game {
 			totalScore += result.scoreGain;
 			this.setRow(row, output);
 			for (const move of result.moves) {
-				this.currentMoveRecords.push({
+				this.moveRecords.push({
 					...move,
 					to: this.rowColToIndex(row, 3 - move.to),
 				});
@@ -432,7 +445,7 @@ class Game {
 		let changed = false;
 		let totalScore = 0;
 
-		for (let col = 0; col < 4; col++) {
+		for (let col = 0; col < Game.SIZE; col++) {
 			const line = this.getColumn(col);
 			const cells = line.map((_val, row) => {
 				const index = this.rowColToIndex(row, col);
@@ -454,7 +467,7 @@ class Game {
 			this.setColumn(col, result.line);
 
 			for (const move of result.moves) {
-				this.currentMoveRecords.push({
+				this.moveRecords.push({
 					...move,
 					to: this.rowColToIndex(move.to, col),
 				});
@@ -468,7 +481,7 @@ class Game {
 		let changed = false;
 		let totalScore = 0;
 
-		for (let col = 0; col < 4; col++) {
+		for (let col = 0; col < Game.SIZE; col++) {
 			const line = this.getColumn(col);
 			const cells = [...line].reverse().map((_val, row) => {
 				const index = this.rowColToIndex(3 - row, col);
@@ -491,7 +504,7 @@ class Game {
 			this.setColumn(col, output);
 
 			for (const move of result.moves) {
-				this.currentMoveRecords.push({
+				this.moveRecords.push({
 					...move,
 					to: this.rowColToIndex(3 - move.to, col),
 				});
@@ -501,15 +514,11 @@ class Game {
 	}
 
 	async move(direction) {
-		if (this.animating) {
-			return;
-		}
-		if (this.gameOver) {
-			return;
-		}
+		if (this.animating) { return; }
+		if (this.gameOver) { return; }
 
-		this.saveBeforeState();
-		this.currentMoveRecords = [];
+    const beforeState = this.createSnapshot();
+		this.moveRecords = [];
 
 		let result;
 		switch (direction) {
@@ -531,11 +540,9 @@ class Game {
 		}
 
 		if (!result.changed) {
-			this.beforeState = null;
 			return;
 		}
-		this.undoState = this.beforeState;
-		this.beforeState = null;
+		this.undoState = beforeState;
 		this.animating = true;
 		this.score += result.scoreGain;
 		this.updateScore();
@@ -546,7 +553,7 @@ class Game {
 		if (result.scoreGain > 0) {
 
       const maxMergedValue = Math.max(
-        ...this.currentMoveRecords
+        ...this.moveRecords
           .filter((m) => m.merged)
           .map((m) => m.newValue)
       );
@@ -564,17 +571,7 @@ class Game {
 		this.checkGameOver();
 		this.saveGame();
 		this.animating = false;
-		this.currentMoveRecords = [];
-	}
-
-	saveBeforeState() {
-		this.beforeState = {
-			board: structuredClone(this.board),
-			nextTileId: this.nextTileId,
-			score: this.score,
-			cleared: this.cleared,
-			gameOver: this.gameOver,
-		};
+		this.moveRecords = [];
 	}
 
 	saveGame() {
@@ -600,13 +597,12 @@ class Game {
 
 		this.tileElements.clear();
 		this.tileLayer.innerHTML = "";
-		this.currentMoveRecords = [];
+		this.moveRecords = [];
 
 		this.board = data.board;
 		this.nextTileId = data.nextTileId;
 		this.score = data.score || 0;
 		this.bestScore = data.bestScore || 0;
-		this.beforeState = null;
 		this.undoState = data.undoState || null;
 		this.cleared = data.cleared || false;
 		this.gameOver = data.gameOver || false;
@@ -618,7 +614,7 @@ class Game {
 	}
 
 	animateMoves() {
-		for (const move of this.currentMoveRecords) {
+		for (const move of this.moveRecords) {
 			const element = this.tileElements.get(move.id);
 			if (!element) {
 				continue;
@@ -628,7 +624,7 @@ class Game {
 	}
 
 	animateMergedTiles() {
-		for (const move of this.currentMoveRecords) {
+		for (const move of this.moveRecords) {
 			const element = this.tileElements.get(move.id);
 			if (!element) {
 				continue;
@@ -650,7 +646,7 @@ class Game {
 	}
 
 	applyMoveResult() {
-		for (const move of this.currentMoveRecords) {
+		for (const move of this.moveRecords) {
 			if (move.removed) {
 				const el = this.tileElements.get(move.id);
 				if (el) {
@@ -722,9 +718,9 @@ class Game {
 				return true;
 			}
 		}
-		for (let r = 0; r < 4; r++) {
-			for (let c = 0; c < 4; c++) {
-				const idx = r * 4 + c;
+		for (let r = 0; r < Game.SIZE; r++) {
+			for (let c = 0; c < Game.SIZE; c++) {
+				const idx = r * Game.SIZE + c;
 				const tile = this.board[idx];
 				if (c < 3) {
 					const right = this.board[idx + 1];
@@ -734,7 +730,7 @@ class Game {
 				}
 
 				if (r < 3) {
-					const down = this.board[idx + 4];
+					const down = this.board[idx + Game.SIZE];
 					if (tile && down && tile.value === down.value) {
 						return true;
 					}
