@@ -2,14 +2,6 @@ class Sound {
   constructor() {
     this.audioContext = null;
     this.periodicWaveCache = new Map();
-    this.waveBuffer = [
-      0,
-      1.0,
-      0.5,
-      0.25,
-      0.125,
-      0.0625,
-    ];
   }
 
   getContext() {
@@ -46,10 +38,7 @@ class Sound {
     osc.frequency.value = freq;
 
     gain.gain.setValueAtTime(volume, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(
-      0.001,
-      ctx.currentTime + duration
-    );
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -251,7 +240,15 @@ class Sound {
   }
 
   // タイルのマージポップの効果音
-  merge() {
+  merge(value) {
+    const pitch = 280 + Math.log2(value) * 20;
+    const volume = Math.min(0.35, 0.20 + Math.log2(value) * 0.01);
+    let toneDuration = 0.06;
+
+    if (value >= 512) {
+      toneDuration = 0.10;
+    }
+
     this.playSynth({ 
       type: "noise", 
       duration: 0.01, 
@@ -263,12 +260,23 @@ class Sound {
     
     this.playSynth({ 
       type: "sine", 
-      duration: 0.06, 
-      volume: 0.25, 
-      freqStart: 380,
-      freqEnd: 280,   // 固定
+      duration: toneDuration, 
+      volume: volume, 
+      freqStart: pitch,
+      freqEnd: pitch * 0.75,
       freqTime: 0.01 
-    }, 0.018); // より引き締めるために、重なりを少し多めに（0.008秒後）
+    }, 0.018);
+
+    if (value >= 1024) {
+      this.playSynth({
+        type: "triangle",
+        duration: toneDuration * 1.2,
+        volume: 0.06,
+        freqStart: 190,
+        freqEnd: 150,
+        freqTime: 0.02,
+      }, 0.018);
+    }
   }
 
 

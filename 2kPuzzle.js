@@ -544,7 +544,14 @@ class Game {
 		this.animateMoves();
 		await this.sleep(140);
 		if (result.scoreGain > 0) {
-			this.sound.merge();
+
+      const maxMergedValue = Math.max(
+        ...this.currentMoveRecords
+          .filter((m) => m.merged)
+          .map((m) => m.newValue)
+      );
+
+      this.sound.merge(maxMergedValue);
       navigator.vibrate?.(10);
 		}
 		this.applyMoveResult();
