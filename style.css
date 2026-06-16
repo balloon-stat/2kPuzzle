@@ -1,163 +1,168 @@
-*{
-  box-sizing:border-box;
-  margin:0;
-  padding:0;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-body{
-  background:#faf8ef;
-  font-family:sans-serif;
-  display:flex;
-  justify-content:center;
+body {
+  background: #faf8ef;
+  font-family: sans-serif;
+  display: flex;
+  justify-content: center;
 }
 
-.app{
-  width:min(95vw,500px);
-  padding:16px;
+.app {
+  width: min(95vw, 500px);
+  padding: 16px;
 }
 
-h1{
-  text-align:center;
-  margin-bottom:12px;
+h1 {
+  text-align: center;
+  margin-bottom: 12px;
 }
 
-.score-area{
-  display:flex;
-  gap:12px;
-  margin-bottom:12px;
+.score-area {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-.score-box{
-  flex:1;
-  background:#bbada0;
-  color:white;
-  border-radius:8px;
-  padding:8px;
-  text-align:center;
+.score-box {
+  flex: 1;
+  background: #bbada0;
+  color: white;
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
 }
 
-.score-box span{
-  display:block;
-  font-size:12px;
+.score-box span {
+  display: block;
+  font-size: 12px;
 }
 
-.score-box div{
-  font-size:24px;
-  font-weight:bold;
+.score-box div {
+  font-size: 24px;
+  font-weight: bold;
 }
 
-.button-area{
-  display:flex;
-  gap:10px;
-  margin-bottom:12px;
+.button-area {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.button-area > button{
-  flex:1;
-  height:44px;
-  border:none;
-  border-radius:8px;
-  background:#8f7a66;
-  color:white;
-  font-size:16px;
+.button-area > button {
+  flex: 1;
+  height: 44px;
+  border: none;
+  border-radius: 8px;
+  background: #8f7a66;
+  color: white;
+  font-size: 16px;
 }
 
-.board{
-  position:relative;
-  width:100%;
-  aspect-ratio:1;
-  background:#bbada0;
-  border-radius:10px;
-  overflow:hidden;
-  touch-action:none;
+.board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background: #bbada0;
+  border-radius: 10px;
+  overflow: hidden;
+  touch-action: none;
 }
 
 .cell-layer,
 .tile-layer,
-.message{
-  position:absolute;
-  inset:0;
+.message {
+  position: absolute;
+  inset: 0;
 }
 
-.cell-layer{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  grid-template-rows:repeat(4,1fr);
-  gap:10px;
-  padding:10px;
+.cell-layer {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 10px;
+  padding: 10px;
 }
 
-.cell{
-  background:#cdc1b4;
-  border-radius:8px;
+.cell {
+  background: #cdc1b4;
+  border-radius: 8px;
 }
 
-.tile-layer{
-  pointer-events:none;
+.tile-layer {
+  pointer-events: none;
 }
 
 .tile,
-.message{
-  display:flex;
-  justify-content:center;
-  align-items:center;
+.message {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.tile{
-  position:absolute;
-  border-radius:8px;
-  font-weight:bold;
+.tile {
+  position: absolute;
+  border-radius: 8px;
+  font-weight: bold;
   transition:
     left 120ms ease,
     top 120ms ease,
     transform 120ms ease;
-  user-select:none;
+  user-select: none;
 }
 
-.message{
-  font-size:42px;
-  font-weight:bold;
-  background:rgba(255,255,255,0.75);
+.message {
+  font-size: 42px;
+  font-weight: bold;
+  background: rgba(255, 255, 255, 0.75);
   transition:
     opacity 300ms,
     transform 300ms;
-  transform:scale(1);
-  user-select:none;
+  transform: scale(1);
+  user-select: none;
 }
 
-.message-hidden{
-  opacity:0;
-  transform:scale(1.2);
-  pointer-events:none;
+.message-hidden {
+  opacity: 0;
+  transform: scale(1.2);
+  pointer-events: none;
 }
 
-.message-show{
-  opacity:1;
-  transform:scale(1);
+.message-show {
+  opacity: 1;
+  transform: scale(1);
 }
 
-.tile-pop{
+.tile-pop {
   animation: tilePop 140ms ease;
 }
 
-@keyframes tilePop{
-  0%{ transform:scale(1); }
-  50%{ transform:scale(1.25); }
-  100%{ transform:scale(1); }
+@keyframes tilePop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
-.tile-new{
+.tile-new {
   animation: tileNew 160ms ease;
 }
 
-@keyframes tileNew{
-  from{
-    opacity:0;
-    transform:scale(0);
+@keyframes tileNew {
+  from {
+    opacity: 0;
+    transform: scale(0);
   }
-  to{
-    opacity:1;
-    transform:scale(1);
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
-
